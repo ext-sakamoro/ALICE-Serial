@@ -9,31 +9,24 @@ name: Security & Hygiene
 # - 未使用依存の炙り出し
 # - 仮実装 (todo! / unimplemented! / panic!(STUB) / dbg!) の CI gate
 
+# no paths filter: the jobs are short for this crate, and a filter does not
+# fire on the first push of a new ci/** branch
 on:
   push:
-    branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'src/**'
-      - 'deny.toml'
-      - '.github/workflows/security-audit.yml'
+    # ci/**: the same checks on a branch before it is fast-forwarded to main
+    branches: [main, 'ci/**']
   pull_request:
     branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'src/**'
-      - 'deny.toml'
-      - '.github/workflows/security-audit.yml'
   schedule:
     # 毎週月曜 09:00 UTC = 18:00 JST
     - cron: '0 9 * * 1'
   workflow_dispatch:
 
+# on main each commit has a group of its own and a run there is never
+# cancelled; a newer push cancels an older run only off main
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   CARGO_TERM_COLOR: always
