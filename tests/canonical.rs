@@ -438,6 +438,11 @@ fn sampled_longer_inputs_fail_or_reencode_to_themselves() {
 
 #[test]
 fn the_semantics_id_is_the_hash_of_the_format_spec() {
+    // a checkout that converted line endings would change the hash
+    assert!(
+        !FORMAT_SPEC.contains('\r'),
+        "FORMAT_SPEC has CR bytes: check .gitattributes"
+    );
     let digest: [u8; 32] = Sha256::digest(FORMAT_SPEC.as_bytes()).into();
     assert_eq!(digest, SERIAL_SEMANTICS_ID);
     assert!(FORMAT_SPEC.starts_with(&format!("alice-serial format {FORMAT_VERSION}\n")));

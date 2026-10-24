@@ -10,8 +10,9 @@ use alloc::vec::Vec;
 /// `VarInt` エンコード (unsigned LEB128)
 #[must_use]
 pub fn encode_varint(mut value: u64) -> Vec<u8> {
-    let mut buf = Vec::new();
-    loop {
+    // a u64 takes at most 10 bytes of 7 bits, so the loop is bounded
+    let mut buf = Vec::with_capacity(10);
+    for _ in 0..10 {
         let mut byte = (value & 0x7F) as u8;
         value >>= 7;
         if value != 0 {

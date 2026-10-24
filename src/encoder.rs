@@ -265,16 +265,6 @@ impl<'a> Reader<'a> {
         Ok(u32::from_be_bytes(w) as usize)
     }
 
-    /// An item count, refused at once when the bytes left cannot hold that many
-    /// one-byte items, so a forged count never sizes an allocation.
-    fn count(&mut self) -> Result<usize, SerialError> {
-        let n = self.len()?;
-        if n > self.data.len() - self.at {
-            return Err(SerialError::BufferTooShort);
-        }
-        Ok(n)
-    }
-
     /// `n` words of `width` bytes each, `n` read from the length prefix; the
     /// byte length is checked against the bytes left before anything is sized.
     fn packed<T>(
@@ -340,8 +330,10 @@ impl<'a> Reader<'a> {
                 if depth >= MAX_DEPTH {
                     return Err(SerialError::TooDeep);
                 }
-                let count = self.count()?;
-                let mut arr = Vec::with_capacity(count);
+                let count = self.len()?;
+                // grown per decoded item, never sized from `count`: counts nested in
+                // each other would multiply memory, while every item takes a byte
+                let mut arr = Vec::new();
                 for _ in 0..count {
                     arr.push(self.value(depth + 1)?);
                 }
@@ -351,8 +343,10 @@ impl<'a> Reader<'a> {
                 if depth >= MAX_DEPTH {
                     return Err(SerialError::TooDeep);
                 }
-                let count = self.count()?;
-                let mut map = Vec::with_capacity(count);
+                let count = self.len()?;
+                // grown per decoded item, never sized from `count`: counts nested in
+                // each other would multiply memory, while every item takes a byte
+                let mut map = Vec::new();
                 let mut prev: Option<&[u8]> = None;
                 for _ in 0..count {
                     let start = self.at;
