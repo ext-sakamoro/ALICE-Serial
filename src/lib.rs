@@ -1,4 +1,20 @@
 //! ALICE-Serial: Binary serialization (VarInt/ZigZag/MessagePack-like).
+//!
+//! Every value has one encoding and the decoder accepts only that one, so the
+//! bytes can be hashed or signed and compared. See [`FORMAT_SPEC`].
+//!
+//! ```
+//! use alice_serial::{decode, encode, Value};
+//!
+//! let v = Value::Map(vec![
+//!     (Value::Str("b".into()), Value::U64(2)),
+//!     (Value::Str("a".into()), Value::U64(1)),
+//! ]);
+//! let bytes = encode(&v)?;
+//! let back = decode(&bytes)?; // keys come back in canonical order
+//! assert_eq!(encode(&back)?, bytes);
+//! # Ok::<(), alice_serial::SerialError>(())
+//! ```
 
 #![no_std]
 #![warn(clippy::all, clippy::pedantic, clippy::nursery)]
@@ -23,6 +39,7 @@ extern crate alloc;
 
 pub mod encoder;
 pub mod errors;
+pub mod law;
 pub mod prelude;
 pub mod value;
 pub mod varint;
@@ -33,6 +50,7 @@ mod integration_tests;
 
 pub use crate::encoder::*;
 pub use crate::errors::*;
+pub use crate::law::*;
 pub use crate::value::*;
 pub use crate::varint::*;
 pub use crate::zigzag::*;

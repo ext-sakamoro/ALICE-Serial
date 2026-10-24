@@ -1,0 +1,35 @@
+[package]
+name = "alice-serial-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.alice-serial]
+path = ".."
+
+# cargo-machete: libfuzzer-sys is referenced only inside the fuzz_target! macro
+[package.metadata.cargo-machete]
+ignored = ["libfuzzer-sys"]
+
+# any bytes: decode never panics, and what it accepts re-encodes to the same bytes
+[[bin]]
+name = "fuzz_decode"
+path = "fuzz_targets/fuzz_decode.rs"
+doc = false
+test = false
+bench = false
+
+# a value built from the bytes: decode(encode(v)) is v with its maps sorted,
+# and encoding that again gives the same bytes
+[[bin]]
+name = "fuzz_roundtrip"
+path = "fuzz_targets/fuzz_roundtrip.rs"
+doc = false
+test = false
+bench = false
