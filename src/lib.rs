@@ -37,6 +37,7 @@
 
 extern crate alloc;
 
+pub mod bounded;
 pub mod encoder;
 pub mod errors;
 pub mod law;

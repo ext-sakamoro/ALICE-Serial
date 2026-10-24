@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `bounded`: `len_within(len, elem_size, remaining)` accepts a length or count read from input only when that many `elem_size`-byte elements fit in the bytes that remain, and `len_at_most(len, limit)` bounds a length read from a stream by a named limit; both use checked arithmetic and return `LenError` (the length, the bound and `LenErrorKind::Remaining` / `Limit` / `Overflow` / `ZeroElementSize`), so a decoder sizes an allocation by the input it has, never by a claim in it
 - `Value::F32` (tag `ca`, big-endian bits) and packed arrays `F32Array` / `F64Array` / `U32Array` / `U64Array` / `I64Array` (tags `d4`..`d8`, element count then fixed-width little-endian words), so numeric vectors take 4 or 8 bytes per element
 - `MAX_DEPTH` (64): the encoder and the decoder refuse arrays and maps nested deeper, so a crafted input cannot exhaust the stack
 - A forged length or count is refused before it sizes an allocation, and counts nested in each other cannot multiply memory: containers grow with the items decoded, never from a count (`tests/decode_alloc_bound.rs` measures the largest allocation and the peak of live bytes with a counting allocator)
