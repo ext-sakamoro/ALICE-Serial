@@ -1,0 +1,74 @@
+name: CI
+
+# 依存 0 crate 向けの構成
+# 2026-09-17 展開: それまで fmt + actionlint のみで test / clippy が CI に無かった
+# (strict-eval 5、protocol 1.0.x 12 crate) toolchain は rust-toolchain.toml の pin
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: "-D warnings"
+
+jobs:
+  test:
+    name: Test + Clippy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (pedantic、all targets、all features)
+        run: cargo clippy --locked --all-targets --all-features -- -W clippy::pedantic -D warnings
+
+      - name: Test
+        run: cargo test --locked --all-features
+
+      - name: Doc (-D warnings)
+        run: cargo doc --locked --no-deps --all-features
+
+  no_std:
+    name: no_std (thumbv7em-none-eabihf)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # `targets:` 入力は rust-toolchain.toml の pin と組むと silent skip するので明示 add
+      - name: Add bare-metal target
+        run: rustup target add thumbv7em-none-eabihf
+      - name: Check (no_std、bare-metal)
+        run: cargo check --locked --lib --no-default-features --target thumbv7em-none-eabihf
+      - name: Clippy (no_std、bare-metal)
+        run: cargo clippy --locked --lib --no-default-features --target thumbv7em-none-eabihf -- -W clippy::pedantic -D warnings
+
+  actionlint:
+    name: actionlint (workflow YAML 検証)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run actionlint
+        uses: reviewdog/action-actionlint@v1
+        with:
+          fail_level: error
+          reporter: github-check

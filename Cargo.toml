@@ -1,0 +1,9 @@
+[package]
+name = "alice-serial"
+version = "0.1.2"
+edition = "2021"
+description = "Serialization formats (MessagePack, CBOR-like, binary encoding)"
+repository = "https://github.com/ext-sakamoro/ALICE-Serial"
+keywords = ["serialization", "messagepack", "cbor", "encoding", "binary"]
+categories = ["encoding", "parser-implementations"]
+license = "MIT OR Apache-2.0"

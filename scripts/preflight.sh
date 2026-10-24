@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# scripts/preflight.sh — local reproduction of the CI gates before `git push`.
+# Every command is the one CI runs. A step this file does not cover is a step
+# that can only fail remotely — when a workflow step is added, add it here in
+# the same commit. Run `--quick` before every push.
+#
+# usage: scripts/preflight.sh [--quick]   (--quick skips the test / bench suites)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+quick=0
+[[ "${1:-}" == "--quick" ]] && quick=1
+
+step() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
+# `cargo clippy` reuses fresh `cargo check` artifacts and then lints nothing;
+# touching the crate roots invalidates only this repo's fingerprints.
+relint() { git ls-files | grep -E '(^|/)src/(lib|main)\.rs$' | xargs -r touch; }
+need() { command -v "$1" >/dev/null 2>&1 || { echo "missing tool: $1 ($2)" >&2; exit 1; }; }
+has_toolchain() { rustup toolchain list | grep -q "^$1"; }
+
+# Steps CI runs that this file cannot reproduce locally (they can only fail remotely):
+#   - ci.yml:no_std:Add bare-metal target (no cargo / grep)
+#   - security-audit.yml:audit:Install cargo-audit (needs network / runner-only)
+#   - security-audit.yml:deny:Install cargo-deny (needs network / runner-only)
+#   - security-audit.yml:semver-checks (job is continue-on-error: informational in CI)
+
+need actionlint "brew install actionlint"
+need cargo-audit "cargo install cargo-audit --locked"
+need cargo-deny "cargo install cargo-deny --locked"
+need cargo-machete "cargo install cargo-machete --locked"
+
+step "ci.yml / test: Check formatting"
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo fmt --all -- --check )
+
+step "ci.yml / test: Clippy (pedantic、all targets、all features)"
+relint
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo clippy --locked --all-targets --all-features -- -W clippy::pedantic -D warnings )
+
+step "ci.yml / test: Doc (-D warnings)"
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo doc --locked --no-deps --all-features )
+
+step "ci.yml / no_std: Check (no_std、bare-metal)"
+rustup target list --installed | grep -q '^thumbv7em-none-eabihf$' || rustup target add thumbv7em-none-eabihf
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo check --locked --lib --no-default-features --target thumbv7em-none-eabihf )
+
+step "ci.yml / no_std: Clippy (no_std、bare-metal)"
+relint
+rustup target list --installed | grep -q '^thumbv7em-none-eabihf$' || rustup target add thumbv7em-none-eabihf
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo clippy --locked --lib --no-default-features --target thumbv7em-none-eabihf -- -W clippy::pedantic -D warnings )
+
+step "ci.yml / actionlint: actionlint"
+actionlint .github/workflows/*.yml
+
+step "security-audit.yml / deny: Run cargo deny check all"
+( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo deny --all-features check all )
+
+step "security-audit.yml / unused-deps: cargo machete"
+cargo machete
+
+step "security-audit.yml / stub-guard: Detect panic!(STUB) / dbg!() in src/** (block)"
+(
+  export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"
+  set -euo pipefail
+  hits=$(grep -rnE 'panic!\("STUB|dbg!\(' src/ || true)
+  if [ -n "$hits" ]; then
+    echo "::error::panic!(STUB) / dbg!() found in src/:"
+    echo "$hits"
+    exit 1
+  fi
+  echo "no panic!(STUB) / dbg!() in src/"
+)
+
+step "security-audit.yml / stub-guard: Detect todo!() / unimplemented!() in src/** (informational)"
+(
+  export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"
+  hits=$(grep -rnE 'todo!\(|unimplemented!\(' src/ || true)
+  if [ -n "$hits" ]; then
+    echo "::warning::todo!() / unimplemented!() found in src/ (fail fast は OK、残置は追跡する):"
+    echo "$hits"
+  fi
+)
+
+step "security-audit.yml / stub-guard: Detect TODO / FIXME / XXX / HACK (informational)"
+(
+  export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"
+  hits=$(grep -rnE '\b(TODO|FIXME|XXX|HACK)\b' src/ || true)
+  if [ -n "$hits" ]; then
+    echo "::warning::TODO / FIXME / XXX / HACK found in src/:"
+    echo "$hits"
+  fi
+)
+
+if [[ $quick -eq 1 ]]; then
+  echo; echo "preflight --quick OK (test / bench suites skipped)"; exit 0
+fi
+
+step "ci.yml / test: Test"
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo test --locked --all-features )
+
+step "security-audit.yml / audit: Run cargo audit"
+( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --deny yanked )
+
+echo; echo "preflight OK"
