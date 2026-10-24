@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Licence: from `MIT OR Apache-2.0` to `LicenseRef-Proprietary` from this version (the source stays published for reading; using it needs a written agreement); published versions keep their licence
 - Breaking: each value has exactly one encoding and the decoder accepts only that one: integers in their shortest form, map keys in strictly ascending order of their encodings with no duplicates. Map entries are written in that order whatever their order in `Value::Map`. Floats are carried bit-exact (NaN payloads and `-0.0` kept), so each bit pattern has one encoding
 - Breaking: `encode` writes the header `ALSR` + format version 1 (`u16` little-endian) before the value, and `decode` checks it and refuses bytes after the value. `encode_value` / `decode_value` read and write a value without the header
 - Breaking: `encode`, `encode_value`, `decode`, `decode_value` and `decode_varint` return `Result<_, SerialError>`; `SerialError` names each refusal (`InvalidTag`, `NonCanonical`, `UnsortedKeys`, `DuplicateKey`, `TooDeep`, `TooLong`, `TrailingBytes`, `BadMagic`, `UnsupportedVersion`, ...) and is `#[non_exhaustive]`; `InvalidFormat` is removed

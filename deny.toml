@@ -44,6 +44,11 @@ allow = [
     "OpenSSL",
 ]
 
+# this crate is publish = false and LicenseRef-Proprietary: unpublished
+# workspace crates are not checked against the allow list
+[licenses.private]
+ignore = true
+
 # ---------------------------------------------------------------------------
 # Bans (banned crate / duplicate / wildcard)
 # ---------------------------------------------------------------------------

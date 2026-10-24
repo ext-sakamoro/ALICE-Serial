@@ -33,4 +33,9 @@ assert_eq!(encode(&back)?, bytes);
 
 ## License
 
-MIT OR Apache-2.0
+`LicenseRef-Proprietary` from this version: the source is published for reading only, and
+using, copying, modifying or distributing it needs a written agreement with
+the copyright holder. The text is [LICENSE-Proprietary](LICENSE-Proprietary). Versions
+published before keep the licence they were published under.
+
+Licence enquiries: <contact@extoria.co.jp>
