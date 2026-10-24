@@ -8,8 +8,6 @@ on:
   push:
     # ci/**: the same checks on a branch before it is fast-forwarded to main
     branches: [main, 'ci/**']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 # on main each commit has a group of its own and a run there is never
