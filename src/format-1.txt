@@ -1,0 +1,16 @@
+alice-serial format 1
+header: "ALSR" then u16 little-endian 1
+null c0; false c2; true c3
+u64: 00..7f as one byte when <= 127, else cf then 8 bytes big-endian
+i64: d3 then 8 bytes big-endian
+f32: ca then 4 bytes big-endian of the bits
+f64: cb then 8 bytes big-endian of the bits
+floats are carried bit-exact: every NaN payload and -0 is kept, and each bit pattern has one encoding (a digest that must treat equal numbers alike normalizes before hashing; the stored data does not)
+str: db then u32 big-endian byte length then UTF-8
+bytes: c6 then u32 big-endian length then the bytes
+packed arrays: tag then u32 big-endian element count then the elements little-endian, fixed width
+f32 array d4 (4 bytes), f64 array d5 (8), u32 array d6 (4), u64 array d7 (8), i64 array d8 (8)
+array: dd then u32 big-endian count then the items
+map: df then u32 big-endian count then key value pairs, keys in strictly ascending bytewise order of their encodings
+nesting: at most 64 arrays and maps
+decode accepts only this encoding and no bytes after the value

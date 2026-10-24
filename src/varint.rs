@@ -1,5 +1,6 @@
 //! varint.
 
+use crate::errors::SerialError;
 use alloc::vec::Vec;
 
 // ---------------------------------------------------------------------------
@@ -24,20 +25,34 @@ pub fn encode_varint(mut value: u64) -> Vec<u8> {
     buf
 }
 
-/// `VarInt` デコード
-#[must_use]
-pub fn decode_varint(data: &[u8]) -> Option<(u64, usize)> {
+/// `VarInt` デコード: the value and the number of bytes it took.
+///
+/// Only the shortest encoding of a value is accepted: a final byte of `0`
+/// after the first byte, or bits past the 64th, are refused.
+///
+/// # Errors
+///
+/// [`SerialError::BufferTooShort`] when the bytes end inside the varint,
+/// [`SerialError::NonCanonical`] for a longer form than the value needs, and
+/// [`SerialError::TooLong`] for a value over `u64::MAX`.
+pub fn decode_varint(data: &[u8]) -> Result<(u64, usize), SerialError> {
     let mut result: u64 = 0;
-    let mut shift = 0;
     for (i, &byte) in data.iter().enumerate() {
-        result |= (u64::from(byte & 0x7F)) << shift;
-        if byte & 0x80 == 0 {
-            return Some((result, i + 1));
+        let shift = 7 * i;
+        let bits = u64::from(byte & 0x7F);
+        if i == 9 && bits > 1 {
+            return Err(SerialError::TooLong);
         }
-        shift += 7;
-        if shift > 63 {
-            return None;
+        result |= bits << shift;
+        if byte & 0x80 == 0 {
+            if i > 0 && byte == 0 {
+                return Err(SerialError::NonCanonical);
+            }
+            return Ok((result, i + 1));
+        }
+        if i == 9 {
+            return Err(SerialError::TooLong);
         }
     }
-    None
+    Err(SerialError::BufferTooShort)
 }

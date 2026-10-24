@@ -18,6 +18,10 @@ use alloc::vec::Vec;
 
 use super::*;
 
+fn enc(v: &Value) -> Vec<u8> {
+    encode_value(v).unwrap()
+}
+
 #[test]
 fn varint_roundtrip() {
     for &n in &[0u64, 1, 127, 128, 300, 16384, u64::MAX] {
@@ -43,61 +47,61 @@ fn zigzag_roundtrip() {
 
 #[test]
 fn encode_decode_null() {
-    let encoded = encode(&Value::Null);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Null);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Null);
 }
 
 #[test]
 fn encode_decode_bool() {
-    let encoded = encode(&Value::Bool(true));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Bool(true));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Bool(true));
 }
 
 #[test]
 fn encode_decode_u64() {
-    let encoded = encode(&Value::U64(12345));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::U64(12345));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::U64(12345));
 }
 
 #[test]
 fn encode_decode_fixint() {
-    let encoded = encode(&Value::U64(42));
+    let encoded = enc(&Value::U64(42));
     assert_eq!(encoded.len(), 1); // fixint
-    let (decoded, _) = decode(&encoded).unwrap();
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::U64(42));
 }
 
 #[test]
 fn encode_decode_string() {
-    let encoded = encode(&Value::Str(String::from("hello")));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Str(String::from("hello")));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Str(String::from("hello")));
 }
 
 #[test]
 fn encode_decode_array() {
     let arr = Value::Array(vec![Value::U64(1), Value::U64(2), Value::Bool(true)]);
-    let encoded = encode(&arr);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&arr);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, arr);
 }
 
 #[test]
 fn encode_decode_map() {
     let map = Value::Map(vec![(Value::Str(String::from("key")), Value::U64(42))]);
-    let encoded = encode(&map);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&map);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, map);
 }
 
 #[test]
 #[allow(clippy::approx_constant)]
 fn encode_decode_f64() {
-    let encoded = encode(&Value::F64(3.14));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(3.14));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     if let Value::F64(f) = decoded {
         assert!((f - 3.14).abs() < 0.001);
     } else {
@@ -108,8 +112,8 @@ fn encode_decode_f64() {
 #[test]
 fn encode_decode_bytes() {
     let data = vec![0xDE, 0xAD, 0xBE, 0xEF];
-    let encoded = encode(&Value::Bytes(data.clone()));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Bytes(data.clone()));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Bytes(data));
 }
 
@@ -187,21 +191,21 @@ fn varint_u64_max_size() {
 #[test]
 fn varint_decode_empty() {
     // 空スライスはNone
-    assert!(decode_varint(&[]).is_none());
+    assert!(decode_varint(&[]).is_err());
 }
 
 #[test]
 fn varint_decode_incomplete() {
     // 継続ビットが立ったまま終了 → None
-    assert!(decode_varint(&[0x80]).is_none());
-    assert!(decode_varint(&[0x80, 0x80]).is_none());
+    assert!(decode_varint(&[0x80]).is_err());
+    assert!(decode_varint(&[0x80, 0x80]).is_err());
 }
 
 #[test]
 fn varint_decode_overflow() {
     // shift > 63 でオーバーフロー検出 → None
     let data = [0x80; 11];
-    assert!(decode_varint(&data).is_none());
+    assert!(decode_varint(&data).is_err());
 }
 
 #[test]
@@ -267,7 +271,7 @@ fn zigzag_known_values() {
 
 #[test]
 fn zigzag_symmetry() {
-    // 正と負の対称性: encode(n) = 2n, encode(-n) = 2n-1
+    // 正と負の対称性: enc(n) = 2n, enc(-n) = 2n-1
     for n in 1..=100i64 {
         #[allow(clippy::cast_sign_loss)]
         {
@@ -346,8 +350,8 @@ fn zigzag_combined_varint() {
 
 #[test]
 fn encode_decode_bool_false() {
-    let encoded = encode(&Value::Bool(false));
-    let (decoded, consumed) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Bool(false));
+    let (decoded, consumed) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Bool(false));
     assert_eq!(consumed, 1);
 }
@@ -355,76 +359,76 @@ fn encode_decode_bool_false() {
 #[test]
 fn encode_decode_u64_zero() {
     // 0はfixint
-    let encoded = encode(&Value::U64(0));
+    let encoded = enc(&Value::U64(0));
     assert_eq!(encoded.len(), 1);
     assert_eq!(encoded[0], 0);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::U64(0));
 }
 
 #[test]
 fn encode_decode_u64_fixint_boundary() {
     // fixint境界: 127はfixint, 128はフル形式
-    let enc_127 = encode(&Value::U64(127));
+    let enc_127 = enc(&Value::U64(127));
     assert_eq!(enc_127.len(), 1);
-    let enc_128 = encode(&Value::U64(128));
+    let enc_128 = enc(&Value::U64(128));
     assert_eq!(enc_128.len(), 9);
 }
 
 #[test]
 fn encode_decode_u64_max() {
-    let encoded = encode(&Value::U64(u64::MAX));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::U64(u64::MAX));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::U64(u64::MAX));
 }
 
 #[test]
 fn encode_decode_i64_positive() {
-    let encoded = encode(&Value::I64(42));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::I64(42));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::I64(42));
 }
 
 #[test]
 fn encode_decode_i64_negative() {
-    let encoded = encode(&Value::I64(-42));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::I64(-42));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::I64(-42));
 }
 
 #[test]
 fn encode_decode_i64_zero() {
-    let encoded = encode(&Value::I64(0));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::I64(0));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::I64(0));
 }
 
 #[test]
 fn encode_decode_i64_min() {
-    let encoded = encode(&Value::I64(i64::MIN));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::I64(i64::MIN));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::I64(i64::MIN));
 }
 
 #[test]
 fn encode_decode_i64_max() {
-    let encoded = encode(&Value::I64(i64::MAX));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::I64(i64::MAX));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::I64(i64::MAX));
 }
 
 #[test]
 fn encode_decode_f64_zero() {
-    let encoded = encode(&Value::F64(0.0));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(0.0));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::F64(0.0));
 }
 
 #[test]
 fn encode_decode_f64_negative_zero() {
     // -0.0 と 0.0 はビットパターンが異なる
-    let encoded = encode(&Value::F64(-0.0));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(-0.0));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     if let Value::F64(f) = decoded {
         assert!(f.to_bits() == (-0.0_f64).to_bits());
     } else {
@@ -434,8 +438,8 @@ fn encode_decode_f64_negative_zero() {
 
 #[test]
 fn encode_decode_f64_nan() {
-    let encoded = encode(&Value::F64(f64::NAN));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(f64::NAN));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     if let Value::F64(f) = decoded {
         assert!(f.is_nan());
     } else {
@@ -445,15 +449,15 @@ fn encode_decode_f64_nan() {
 
 #[test]
 fn encode_decode_f64_infinity() {
-    let encoded = encode(&Value::F64(f64::INFINITY));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(f64::INFINITY));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::F64(f64::INFINITY));
 }
 
 #[test]
 fn encode_decode_f64_neg_infinity() {
-    let encoded = encode(&Value::F64(f64::NEG_INFINITY));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(f64::NEG_INFINITY));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::F64(f64::NEG_INFINITY));
 }
 
@@ -461,29 +465,29 @@ fn encode_decode_f64_neg_infinity() {
 fn encode_decode_f64_subnormal() {
     // 非正規化数のラウンドトリップ
     let subnormal = f64::MIN_POSITIVE / 2.0;
-    let encoded = encode(&Value::F64(subnormal));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(subnormal));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::F64(subnormal));
 }
 
 #[test]
 fn encode_decode_f64_max() {
-    let encoded = encode(&Value::F64(f64::MAX));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(f64::MAX));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::F64(f64::MAX));
 }
 
 #[test]
 fn encode_decode_f64_min() {
-    let encoded = encode(&Value::F64(f64::MIN));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::F64(f64::MIN));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::F64(f64::MIN));
 }
 
 #[test]
 fn encode_decode_str_empty() {
-    let encoded = encode(&Value::Str(String::new()));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Str(String::new()));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Str(String::new()));
 }
 
@@ -491,8 +495,8 @@ fn encode_decode_str_empty() {
 fn encode_decode_str_multibyte_utf8() {
     // マルチバイトUTF-8文字列
     let s = String::from("\u{3053}\u{3093}\u{306b}\u{3061}\u{306f}\u{4e16}\u{754c}\u{1f30d}");
-    let encoded = encode(&Value::Str(s.clone()));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Str(s.clone()));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Str(s));
 }
 
@@ -500,15 +504,15 @@ fn encode_decode_str_multibyte_utf8() {
 fn encode_decode_str_long() {
     // 長い文字列（1024バイト）
     let s: String = (0..1024).map(|_| 'A').collect();
-    let encoded = encode(&Value::Str(s.clone()));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Str(s.clone()));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Str(s));
 }
 
 #[test]
 fn encode_decode_bytes_empty() {
-    let encoded = encode(&Value::Bytes(vec![]));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Bytes(vec![]));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Bytes(vec![]));
 }
 
@@ -516,24 +520,24 @@ fn encode_decode_bytes_empty() {
 fn encode_decode_bytes_large() {
     // 大きいバイト列（256バイト）
     let data: Vec<u8> = (0..=255).collect();
-    let encoded = encode(&Value::Bytes(data.clone()));
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&Value::Bytes(data.clone()));
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, Value::Bytes(data));
 }
 
 #[test]
 fn encode_decode_array_empty() {
     let arr = Value::Array(vec![]);
-    let encoded = encode(&arr);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&arr);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, arr);
 }
 
 #[test]
 fn encode_decode_array_single() {
     let arr = Value::Array(vec![Value::Null]);
-    let encoded = encode(&arr);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&arr);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, arr);
 }
 
@@ -542,8 +546,8 @@ fn encode_decode_array_nested() {
     // ネストした配列
     let inner = Value::Array(vec![Value::U64(1), Value::U64(2)]);
     let outer = Value::Array(vec![inner, Value::Bool(true)]);
-    let encoded = encode(&outer);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&outer);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, outer);
 }
 
@@ -559,8 +563,8 @@ fn encode_decode_array_mixed_types() {
         Value::Str(String::from("test")),
         Value::Bytes(vec![1, 2, 3]),
     ]);
-    let encoded = encode(&arr);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&arr);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, arr);
 }
 
@@ -568,16 +572,16 @@ fn encode_decode_array_mixed_types() {
 fn encode_decode_array_many_elements() {
     // 要素数100の配列
     let arr = Value::Array((0..100).map(Value::U64).collect());
-    let encoded = encode(&arr);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&arr);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, arr);
 }
 
 #[test]
 fn encode_decode_map_empty() {
     let map = Value::Map(vec![]);
-    let encoded = encode(&map);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&map);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, map);
 }
 
@@ -588,8 +592,8 @@ fn encode_decode_map_multiple_entries() {
         (Value::Str(String::from("b")), Value::U64(2)),
         (Value::Str(String::from("c")), Value::U64(3)),
     ]);
-    let encoded = encode(&map);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&map);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, map);
 }
 
@@ -600,8 +604,8 @@ fn encode_decode_map_nested_value() {
         Value::Str(String::from("list")),
         Value::Array(vec![Value::U64(1), Value::U64(2)]),
     )]);
-    let encoded = encode(&map);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&map);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, map);
 }
 
@@ -612,8 +616,8 @@ fn encode_decode_map_non_string_keys() {
         (Value::U64(1), Value::Str(String::from("one"))),
         (Value::Bool(true), Value::Null),
     ]);
-    let encoded = encode(&map);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&map);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, map);
 }
 
@@ -622,8 +626,8 @@ fn encode_decode_map_nested_map() {
     // ネストしたMap
     let inner = Value::Map(vec![(Value::Str(String::from("x")), Value::U64(10))]);
     let outer = Value::Map(vec![(Value::Str(String::from("inner")), inner)]);
-    let encoded = encode(&outer);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&outer);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, outer);
 }
 
@@ -631,9 +635,9 @@ fn encode_decode_map_nested_map() {
 fn fixint_all_values() {
     // fixint範囲 0-127 の全値を検証
     for n in 0..=127u64 {
-        let encoded = encode(&Value::U64(n));
+        let encoded = enc(&Value::U64(n));
         assert_eq!(encoded.len(), 1, "fixint {n} が1バイトでない");
-        let (decoded, consumed) = decode(&encoded).unwrap();
+        let (decoded, consumed) = decode_value(&encoded).unwrap();
         assert_eq!(decoded, Value::U64(n));
         assert_eq!(consumed, 1);
     }
@@ -645,48 +649,48 @@ fn fixint_all_values() {
 
 #[test]
 fn decode_empty_data() {
-    assert!(decode(&[]).is_none());
+    assert!(decode_value(&[]).is_err());
 }
 
 #[test]
 fn decode_unknown_tag() {
     // 未定義タグ → None
-    assert!(decode(&[0xC1]).is_none());
-    assert!(decode(&[0xC4]).is_none());
-    assert!(decode(&[0xD0]).is_none());
+    assert!(decode_value(&[0xC1]).is_err());
+    assert!(decode_value(&[0xC4]).is_err());
+    assert!(decode_value(&[0xD0]).is_err());
 }
 
 #[test]
 fn decode_u64_truncated() {
     // TAG_U64の後にバイトが足りない
-    assert!(decode(&[0xCF]).is_none());
-    assert!(decode(&[0xCF, 0x00, 0x00]).is_none());
-    assert!(decode(&[0xCF, 0, 0, 0, 0, 0, 0, 0]).is_none());
+    assert!(decode_value(&[0xCF]).is_err());
+    assert!(decode_value(&[0xCF, 0x00, 0x00]).is_err());
+    assert!(decode_value(&[0xCF, 0, 0, 0, 0, 0, 0, 0]).is_err());
 }
 
 #[test]
 fn decode_i64_truncated() {
-    assert!(decode(&[0xD3]).is_none());
-    assert!(decode(&[0xD3, 0x00, 0x00, 0x00]).is_none());
+    assert!(decode_value(&[0xD3]).is_err());
+    assert!(decode_value(&[0xD3, 0x00, 0x00, 0x00]).is_err());
 }
 
 #[test]
 fn decode_f64_truncated() {
-    assert!(decode(&[0xCB]).is_none());
-    assert!(decode(&[0xCB, 0x00]).is_none());
+    assert!(decode_value(&[0xCB]).is_err());
+    assert!(decode_value(&[0xCB, 0x00]).is_err());
 }
 
 #[test]
 fn decode_str_truncated_length() {
     // TAG_STRの後に長さフィールドが足りない
-    assert!(decode(&[0xDB]).is_none());
-    assert!(decode(&[0xDB, 0x00, 0x00]).is_none());
+    assert!(decode_value(&[0xDB]).is_err());
+    assert!(decode_value(&[0xDB, 0x00, 0x00]).is_err());
 }
 
 #[test]
 fn decode_str_truncated_body() {
     // 長さは5だが実データが3バイトしかない
-    assert!(decode(&[0xDB, 0x00, 0x00, 0x00, 0x05, b'a', b'b', b'c']).is_none());
+    assert!(decode_value(&[0xDB, 0x00, 0x00, 0x00, 0x05, b'a', b'b', b'c']).is_err());
 }
 
 #[test]
@@ -694,24 +698,24 @@ fn decode_str_invalid_utf8() {
     // 不正なUTF-8バイト列 → None
     let mut buf = vec![0xDB, 0x00, 0x00, 0x00, 0x02];
     buf.extend_from_slice(&[0xFF, 0xFE]);
-    assert!(decode(&buf).is_none());
+    assert!(decode_value(&buf).is_err());
 }
 
 #[test]
 fn decode_bin_truncated_length() {
-    assert!(decode(&[0xC6]).is_none());
-    assert!(decode(&[0xC6, 0x00]).is_none());
+    assert!(decode_value(&[0xC6]).is_err());
+    assert!(decode_value(&[0xC6, 0x00]).is_err());
 }
 
 #[test]
 fn decode_bin_truncated_body() {
-    assert!(decode(&[0xC6, 0x00, 0x00, 0x00, 0x03, 0x01]).is_none());
+    assert!(decode_value(&[0xC6, 0x00, 0x00, 0x00, 0x03, 0x01]).is_err());
 }
 
 #[test]
 fn decode_array_truncated_length() {
-    assert!(decode(&[0xDD]).is_none());
-    assert!(decode(&[0xDD, 0x00, 0x00]).is_none());
+    assert!(decode_value(&[0xDD]).is_err());
+    assert!(decode_value(&[0xDD, 0x00, 0x00]).is_err());
 }
 
 #[test]
@@ -719,12 +723,12 @@ fn decode_array_truncated_elements() {
     // 要素数2だが要素が1つしかない
     let mut buf = vec![0xDD, 0x00, 0x00, 0x00, 0x02];
     buf.push(0xC0);
-    assert!(decode(&buf).is_none());
+    assert!(decode_value(&buf).is_err());
 }
 
 #[test]
 fn decode_map_truncated_length() {
-    assert!(decode(&[0xDF]).is_none());
+    assert!(decode_value(&[0xDF]).is_err());
 }
 
 #[test]
@@ -732,7 +736,7 @@ fn decode_map_truncated_entries() {
     // エントリ数1だがキーしかない
     let mut buf = vec![0xDF, 0x00, 0x00, 0x00, 0x01];
     buf.push(0xC0);
-    assert!(decode(&buf).is_none());
+    assert!(decode_value(&buf).is_err());
 }
 
 #[test]
@@ -741,7 +745,7 @@ fn decode_map_missing_value() {
     let mut buf = vec![0xDF, 0x00, 0x00, 0x00, 0x01];
     buf.push(0xC0);
     buf.push(0xCF); // TAG_U64だがデータなし
-    assert!(decode(&buf).is_none());
+    assert!(decode_value(&buf).is_err());
 }
 
 // =========================================================================
@@ -750,64 +754,64 @@ fn decode_map_missing_value() {
 
 #[test]
 fn decode_consumed_null() {
-    let (_, consumed) = decode(&[0xC0]).unwrap();
+    let (_, consumed) = decode_value(&[0xC0]).unwrap();
     assert_eq!(consumed, 1);
 }
 
 #[test]
 fn decode_consumed_bool() {
-    let (_, consumed) = decode(&[0xC2]).unwrap();
+    let (_, consumed) = decode_value(&[0xC2]).unwrap();
     assert_eq!(consumed, 1);
-    let (_, consumed) = decode(&[0xC3]).unwrap();
+    let (_, consumed) = decode_value(&[0xC3]).unwrap();
     assert_eq!(consumed, 1);
 }
 
 #[test]
 fn decode_consumed_u64() {
-    let enc = encode(&Value::U64(1000));
-    let (_, consumed) = decode(&enc).unwrap();
+    let enc = enc(&Value::U64(1000));
+    let (_, consumed) = decode_value(&enc).unwrap();
     assert_eq!(consumed, 9);
 }
 
 #[test]
 fn decode_consumed_i64() {
-    let enc = encode(&Value::I64(-1));
-    let (_, consumed) = decode(&enc).unwrap();
+    let enc = enc(&Value::I64(-1));
+    let (_, consumed) = decode_value(&enc).unwrap();
     assert_eq!(consumed, 9);
 }
 
 #[test]
 fn decode_consumed_f64() {
-    let enc = encode(&Value::F64(1.0));
-    let (_, consumed) = decode(&enc).unwrap();
+    let enc = enc(&Value::F64(1.0));
+    let (_, consumed) = decode_value(&enc).unwrap();
     assert_eq!(consumed, 9);
 }
 
 #[test]
 fn decode_consumed_str() {
-    let enc = encode(&Value::Str(String::from("abc")));
-    let (_, consumed) = decode(&enc).unwrap();
+    let enc = enc(&Value::Str(String::from("abc")));
+    let (_, consumed) = decode_value(&enc).unwrap();
     assert_eq!(consumed, 1 + 4 + 3);
 }
 
 #[test]
 fn decode_consumed_bytes() {
-    let enc = encode(&Value::Bytes(vec![1, 2]));
-    let (_, consumed) = decode(&enc).unwrap();
+    let enc = enc(&Value::Bytes(vec![1, 2]));
+    let (_, consumed) = decode_value(&enc).unwrap();
     assert_eq!(consumed, 1 + 4 + 2);
 }
 
 #[test]
 fn decode_consumed_empty_array() {
-    let enc = encode(&Value::Array(vec![]));
-    let (_, consumed) = decode(&enc).unwrap();
+    let enc = enc(&Value::Array(vec![]));
+    let (_, consumed) = decode_value(&enc).unwrap();
     assert_eq!(consumed, 5);
 }
 
 #[test]
 fn decode_consumed_empty_map() {
-    let enc = encode(&Value::Map(vec![]));
-    let (_, consumed) = decode(&enc).unwrap();
+    let enc = enc(&Value::Map(vec![]));
+    let (_, consumed) = decode_value(&enc).unwrap();
     assert_eq!(consumed, 5);
 }
 
@@ -817,22 +821,22 @@ fn decode_consumed_empty_map() {
 
 #[test]
 fn encode_null_tag() {
-    assert_eq!(encode(&Value::Null), vec![0xC0]);
+    assert_eq!(enc(&Value::Null), vec![0xC0]);
 }
 
 #[test]
 fn encode_false_tag() {
-    assert_eq!(encode(&Value::Bool(false)), vec![0xC2]);
+    assert_eq!(enc(&Value::Bool(false)), vec![0xC2]);
 }
 
 #[test]
 fn encode_true_tag() {
-    assert_eq!(encode(&Value::Bool(true)), vec![0xC3]);
+    assert_eq!(enc(&Value::Bool(true)), vec![0xC3]);
 }
 
 #[test]
 fn encode_u64_tag_and_bytes() {
-    let enc = encode(&Value::U64(256));
+    let enc = enc(&Value::U64(256));
     assert_eq!(enc[0], 0xCF);
     let val = u64::from_be_bytes([
         enc[1], enc[2], enc[3], enc[4], enc[5], enc[6], enc[7], enc[8],
@@ -842,7 +846,7 @@ fn encode_u64_tag_and_bytes() {
 
 #[test]
 fn encode_i64_tag_and_bytes() {
-    let enc = encode(&Value::I64(-100));
+    let enc = enc(&Value::I64(-100));
     assert_eq!(enc[0], 0xD3);
     let val = i64::from_be_bytes([
         enc[1], enc[2], enc[3], enc[4], enc[5], enc[6], enc[7], enc[8],
@@ -852,7 +856,7 @@ fn encode_i64_tag_and_bytes() {
 
 #[test]
 fn encode_str_tag_and_length() {
-    let enc = encode(&Value::Str(String::from("hi")));
+    let enc = enc(&Value::Str(String::from("hi")));
     assert_eq!(enc[0], 0xDB);
     let len = u32::from_be_bytes([enc[1], enc[2], enc[3], enc[4]]);
     assert_eq!(len, 2);
@@ -861,7 +865,7 @@ fn encode_str_tag_and_length() {
 
 #[test]
 fn encode_bin_tag_and_length() {
-    let enc = encode(&Value::Bytes(vec![0xAA, 0xBB]));
+    let enc = enc(&Value::Bytes(vec![0xAA, 0xBB]));
     assert_eq!(enc[0], 0xC6);
     let len = u32::from_be_bytes([enc[1], enc[2], enc[3], enc[4]]);
     assert_eq!(len, 2);
@@ -870,7 +874,7 @@ fn encode_bin_tag_and_length() {
 
 #[test]
 fn encode_array_tag_and_count() {
-    let enc = encode(&Value::Array(vec![Value::Null, Value::Null]));
+    let enc = enc(&Value::Array(vec![Value::Null, Value::Null]));
     assert_eq!(enc[0], 0xDD);
     let count = u32::from_be_bytes([enc[1], enc[2], enc[3], enc[4]]);
     assert_eq!(count, 2);
@@ -878,7 +882,7 @@ fn encode_array_tag_and_count() {
 
 #[test]
 fn encode_map_tag_and_count() {
-    let enc = encode(&Value::Map(vec![(Value::U64(1), Value::U64(2))]));
+    let enc = enc(&Value::Map(vec![(Value::U64(1), Value::U64(2))]));
     assert_eq!(enc[0], 0xDF);
     let count = u32::from_be_bytes([enc[1], enc[2], enc[3], enc[4]]);
     assert_eq!(count, 1);
@@ -889,9 +893,9 @@ fn encode_map_tag_and_count() {
 // =========================================================================
 
 #[test]
-fn serial_error_display_invalid_format() {
-    let e = SerialError::InvalidFormat;
-    assert_eq!(alloc::format!("{e}"), "invalid format");
+fn serial_error_display_invalid_tag() {
+    let e = SerialError::InvalidTag(0xC1);
+    assert_eq!(alloc::format!("{e}"), "invalid tag 0xc1");
 }
 
 #[test]
@@ -908,8 +912,8 @@ fn serial_error_display_utf8_error() {
 
 #[test]
 fn serial_error_clone_and_eq() {
-    let e1 = SerialError::InvalidFormat;
-    let e2 = e1.clone();
+    let e1 = SerialError::NonCanonical;
+    let e2 = e1;
     assert_eq!(e1, e2);
     assert_ne!(e1, SerialError::BufferTooShort);
 }
@@ -970,8 +974,8 @@ fn deeply_nested_structure() {
     for _ in 0..5 {
         v = Value::Array(vec![v]);
     }
-    let encoded = encode(&v);
-    let (decoded, _) = decode(&encoded).unwrap();
+    let encoded = enc(&v);
+    let (decoded, _) = decode_value(&encoded).unwrap();
     assert_eq!(decoded, v);
 }
 
@@ -1002,17 +1006,49 @@ fn complex_document() {
         ),
         (Value::Str(String::from("nothing")), Value::Null),
     ]);
-    let encoded = encode(&doc);
-    let (decoded, _) = decode(&encoded).unwrap();
-    assert_eq!(decoded, doc);
+    let encoded = enc(&doc);
+    let (decoded, _) = decode_value(&encoded).unwrap();
+    // map entries come back in ascending order of their encoded keys: a string
+    // key's encoding starts with its length, so shorter keys come first
+    let Value::Map(entries) = &decoded else {
+        panic!("not a map: {decoded:?}")
+    };
+    let keys: Vec<&str> = entries
+        .iter()
+        .map(|(k, _)| match k {
+            Value::Str(s) => s.as_str(),
+            other => panic!("not a string key: {other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        keys,
+        ["age", "name", "active", "scores", "nothing", "metadata"]
+    );
+    let Value::Map(doc_entries) = &doc else {
+        unreachable!()
+    };
+    for (k, v) in doc_entries {
+        let found = &entries.iter().find(|(dk, _)| dk == k).unwrap().1;
+        if let (Value::Map(a), Value::Map(b)) = (found, v) {
+            assert_eq!(a.len(), b.len());
+            assert_eq!(a[0].0, Value::Str(String::from("data")));
+        } else {
+            assert_eq!(found, v);
+        }
+    }
+    assert_eq!(
+        enc(&decoded),
+        encoded,
+        "re-encoding the decoded value differs"
+    );
 }
 
 #[test]
 fn decode_trailing_data_ignored() {
     // デコード後に余分なデータがあっても正しくデコードし、consumedが正しい
-    let mut buf = encode(&Value::Bool(true));
+    let mut buf = enc(&Value::Bool(true));
     buf.extend_from_slice(&[0xFF, 0xFF, 0xFF]);
-    let (val, consumed) = decode(&buf).unwrap();
+    let (val, consumed) = decode_value(&buf).unwrap();
     assert_eq!(val, Value::Bool(true));
     assert_eq!(consumed, 1);
 }
@@ -1028,11 +1064,11 @@ fn sequential_values_decode() {
     ];
     let mut buf = Vec::new();
     for v in &values {
-        buf.extend(encode(v));
+        buf.extend(enc(v));
     }
     let mut offset = 0;
     for expected in &values {
-        let (val, consumed) = decode(&buf[offset..]).unwrap();
+        let (val, consumed) = decode_value(&buf[offset..]).unwrap();
         assert_eq!(&val, expected);
         offset += consumed;
     }
@@ -1043,8 +1079,8 @@ fn sequential_values_decode() {
 fn encode_deterministic() {
     // 同じ入力に対して常に同じ出力
     let v = Value::Map(vec![(Value::Str(String::from("k")), Value::U64(1))]);
-    let enc1 = encode(&v);
-    let enc2 = encode(&v);
+    let enc1 = enc(&v);
+    let enc2 = enc(&v);
     assert_eq!(enc1, enc2);
 }
 
@@ -1052,7 +1088,7 @@ fn encode_deterministic() {
 fn all_fixint_decode_as_u64() {
     // 0x00-0x7F タグはfixintとしてU64にデコードされる
     for tag in 0..=0x7Fu8 {
-        let (val, consumed) = decode(&[tag]).unwrap();
+        let (val, consumed) = decode_value(&[tag]).unwrap();
         assert_eq!(val, Value::U64(u64::from(tag)));
         assert_eq!(consumed, 1);
     }
