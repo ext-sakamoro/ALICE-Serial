@@ -4,7 +4,9 @@
 //! near-valid input). Fails if any of the three outcomes was compared fewer
 //! times than its floor, so a check that silently compared nothing is red.
 
-use alice_serial_fuzz::{check, Compared, Zoo, LIMIT};
+use std::collections::BTreeMap;
+
+use alice_serial_fuzz::{check, Compared, Kind, Newtype, TupleStruct, UnitStruct, Zoo, LIMIT};
 use arbitrary::{Arbitrary, Unstructured};
 
 /// xorshift64*: a fixed sequence, the same on every machine.
@@ -58,6 +60,44 @@ fn alice_serial_agrees_with_bincode_1_and_2_on_a_fixed_corpus() {
         longer.extend_from_slice(&[0xab, 0xcd]);
         add(&mut total, check(&longer));
     }
+    // one value nested past the default depth: alice-serial refuses it at 128 and the
+    // check compares it again at a depth that holds it
+    let mut kind = Kind::Unit;
+    for _ in 0..300 {
+        kind = Kind::Nested(Some(Box::new(kind)));
+    }
+    let deep = Zoo {
+        b: true,
+        u8_: 1,
+        i8_: -1,
+        u16_: 2,
+        i16_: -2,
+        u32_: 3,
+        i32_: -3,
+        u64_: 4,
+        i64_: -4,
+        u128_: 5,
+        i128_: -5,
+        usize_: 6,
+        f32_: 1.5,
+        f64_: -2.5,
+        c: 'x',
+        s: "deep".into(),
+        o: Some(7),
+        unit: (),
+        unit_struct: UnitStruct,
+        newtype: Newtype(8),
+        tuple: (9, -9, 'y'),
+        tuple_struct: TupleStruct(10, Some('z')),
+        array: [1, 2, 3],
+        seq: vec![kind],
+        map: BTreeMap::new(),
+        nested: None,
+    };
+    let bytes = alice_serial::bincode1::to_vec(&deep, LIMIT).unwrap();
+    let c = check(&bytes);
+    assert_eq!((c.too_deep, c.accepted), (1, 1), "{c:?}");
+    add(&mut total, c);
     println!("{total:?}");
     assert!(total.encoded > 4000, "values compared: {total:?}");
     assert!(total.accepted > 4000, "accepted inputs compared: {total:?}");

@@ -34,10 +34,11 @@ A decode reads only from the bytes it was given:
   - nothing past the caller's limit is read, and an encode writes nothing past
     the caller's limit; a length that would run past the limit is refused
     before it sizes anything
-  - enums, Some values, seqs and maps nested more than 128 deep (or the depth
-    the caller names) are refused; only these can make a type recurse, so
-    tuples, structs and newtypes do not count. bincode has no such bound and
-    exhausts the stack on such input instead
+  - values nested more than 128 deep (or the depth the caller names) are
+    refused; every enum, Some value, seq, map, tuple, struct and newtype
+    struct is one level, so a type that recurses through any of them is
+    bounded. bincode has no such bound and exhausts the stack on such input
+    instead
   - a char whose bytes run past the end of the input or the limit is refused
     as the end of the input or the limit
   - from_slice refuses bytes left after the value; from_slice_prefix returns

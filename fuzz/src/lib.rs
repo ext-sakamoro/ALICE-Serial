@@ -21,6 +21,10 @@ use serde::{Deserialize, Serialize};
 /// The limit every side is given; far above any fuzz input.
 pub const LIMIT: usize = 1 << 20;
 
+/// A nesting depth that holds any value a fuzz input can describe (a level takes at
+/// least a byte, and inputs stay far below this many bytes).
+pub const DEEP: usize = 1 << 16;
+
 /// A unit struct: no bytes.
 #[derive(Serialize, Deserialize, Arbitrary, Debug)]
 pub struct UnitStruct;
@@ -95,8 +99,8 @@ pub struct Compared {
     pub accepted: usize,
     /// Raw inputs the three decoders all refused.
     pub refused: usize,
-    /// Raw inputs alice-serial refused for nesting past its depth limit, which bincode
-    /// has no bound for: not compared (the layout states the difference).
+    /// Raw inputs alice-serial refused at the default depth, which bincode has no bound
+    /// for; each is compared again at `DEEP` and also counted as accepted or refused.
     pub too_deep: usize,
 }
 
@@ -109,16 +113,31 @@ pub fn check(data: &[u8]) -> Compared {
         let a = ours(&v);
         assert_eq!(a, bincode1(&v), "alice-serial vs bincode 1: {v:?}");
         assert_eq!(a, bincode2(&v), "alice-serial vs bincode 2: {v:?}");
-        let back: Zoo = alice_serial::bincode1::from_slice(&a, LIMIT).expect("decode own bytes");
+        // a value built from the input can nest past the default depth; its own bytes
+        // decode with a depth that holds it
+        let back: Zoo = alice_serial::bincode1::from_slice_with_depth(&a, LIMIT, DEEP)
+            .expect("decode own bytes");
         assert_eq!(ours(&back), a, "round trip changed the bytes");
         compared.encoded += 1;
     }
 
     // 2. the raw bytes: the three decoders accept and refuse alike
-    let a = alice_serial::bincode1::from_slice_prefix::<Zoo>(data, LIMIT);
-    if matches!(a, Err(alice_serial::bincode1::Bincode1Error::TooDeep { .. })) {
+    let mut a = alice_serial::bincode1::from_slice_prefix::<Zoo>(data, LIMIT);
+    if matches!(
+        a,
+        Err(alice_serial::bincode1::Bincode1Error::TooDeep { .. })
+    ) {
+        // refused for depth alone: compare again with a depth that holds it, so the rest
+        // of the decode is still checked against bincode
         compared.too_deep += 1;
-        return compared;
+        a = alice_serial::bincode1::from_slice_prefix_with_depth::<Zoo>(data, LIMIT, DEEP);
+        assert!(
+            !matches!(
+                a,
+                Err(alice_serial::bincode1::Bincode1Error::TooDeep { .. })
+            ),
+            "deeper than {DEEP} levels: raise DEEP"
+        );
     }
     let b1 = bincode1_ref::deserialize::<Zoo>(data);
     let b2 = bincode2_ref::serde::decode_from_slice::<Zoo, _>(

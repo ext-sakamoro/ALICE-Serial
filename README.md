@@ -39,7 +39,7 @@ unchanged without depending on bincode:
 
 - fixed-width little-endian integers, `u64` lengths, a `u32` variant index, a `u8` tag for `Option`
 - every call takes a limit; a decode checks each length against the bytes that remain before it sizes anything
-- a decode refuses nesting deeper than `DEFAULT_MAX_DEPTH` (128) enums, `Some` values, sequences and maps, so input cannot exhaust the stack; `from_slice_with_depth` names another depth
+- a decode refuses values nested deeper than `DEFAULT_MAX_DEPTH` (128) levels, each enum, `Some`, sequence, map, tuple, struct and newtype struct being one, so input cannot exhaust the stack; `from_slice_with_depth` names another depth
 - an encode refuses a sequence of zero-size elements, which could not be read back
 - `from_slice` refuses trailing bytes; `from_slice_prefix` returns the value and the bytes it used
 - builds without `std` (`alloc` only)

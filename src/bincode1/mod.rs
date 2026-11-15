@@ -10,8 +10,8 @@
 //! decode reads at most that many. A length or count read from the input is
 //! checked against the bytes that remain ([`crate::bounded::len_within`])
 //! before it sizes anything, so a few bytes cannot ask for a large allocation.
-//! A decode also refuses nesting deeper than [`DEFAULT_MAX_DEPTH`] (or the depth
-//! the caller names), so a few bytes per level cannot exhaust the stack.
+//! A decode also refuses values nested deeper than [`DEFAULT_MAX_DEPTH`] (or the
+//! depth the caller names), so a few bytes per level cannot exhaust the stack.
 //!
 //! ```
 //! use alice_serial::bincode1::{from_slice, to_vec};
@@ -40,16 +40,18 @@ pub const BINCODE1_LAYOUT: &str = include_str!("../bincode1-layout.txt");
 /// SHA-256 of [`BINCODE1_LAYOUT`]. A store that keeps bytes in this layout can
 /// keep this identifier next to them and compare it with the reader's.
 pub const BINCODE1_LAYOUT_ID: [u8; 32] = [
-    0x91, 0xeb, 0xb6, 0x07, 0x27, 0xbe, 0x3a, 0x0b, 0x63, 0x50, 0xb1, 0x7f, 0x75, 0x13, 0x3f, 0xf0,
-    0x7a, 0x88, 0xf3, 0xe3, 0xd8, 0xdf, 0xa2, 0x11, 0xbf, 0xd2, 0x87, 0x84, 0x52, 0xe7, 0x56, 0xd2,
+    0x23, 0x50, 0x91, 0xce, 0xb4, 0x92, 0xac, 0x58, 0x96, 0xb2, 0x70, 0xb4, 0x2d, 0x8e, 0x50, 0x8c,
+    0x1d, 0x13, 0x4c, 0x0b, 0x92, 0x15, 0x18, 0xc1, 0x6b, 0x7f, 0xbe, 0x18, 0x42, 0x1e, 0x98, 0xcc,
 ];
 
-/// How deep a decode nests enums, `Some` values, sequences and maps before it
-/// refuses the input ([`Bincode1Error::TooDeep`]).
+/// How deep a decode nests values before it refuses the input
+/// ([`Bincode1Error::TooDeep`]).
 ///
-/// Only these can make a type recurse; tuples, structs and newtypes have a fixed shape and
-/// do not count. A caller whose data nests deeper names its own depth with
-/// [`from_slice_with_depth`] and decodes on a thread whose stack fits it.
+/// Every enum, `Some` value, sequence, map, tuple, struct and newtype struct is one
+/// level: a type can recurse only through these, so the bound holds whether its
+/// `Deserialize` is derived or written by hand. A caller whose data nests deeper
+/// names its own depth with [`from_slice_with_depth`] and decodes on a thread
+/// whose stack fits it.
 pub const DEFAULT_MAX_DEPTH: usize = 128;
 
 /// Why an encode or a decode in this layout failed.

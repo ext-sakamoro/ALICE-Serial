@@ -27,8 +27,9 @@ impl<'de> Deserializer<'de> {
         }
     }
 
-    /// Run `f` one level deeper: an enum, a `Some`, a sequence or a map. Only these can
-    /// make a type recurse, so counting them bounds the stack a decode can use.
+    /// Run `f` one level deeper: an enum, a `Some`, a sequence, a map, a tuple, a struct
+    /// or a newtype struct. A type can recurse only through these, so counting them
+    /// bounds the stack a decode can use, whether its `Deserialize` is derived or not.
     fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
         if self.depth >= self.max_depth {
             return Err(Bincode1Error::TooDeep {
@@ -203,7 +204,7 @@ impl<'de> de::Deserializer<'de> for &mut Deserializer<'de> {
         _name: &'static str,
         visitor: V,
     ) -> Result<V::Value> {
-        visitor.visit_newtype_struct(self)
+        self.nested(|de| visitor.visit_newtype_struct(de))
     }
 
     fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
@@ -212,7 +213,7 @@ impl<'de> de::Deserializer<'de> for &mut Deserializer<'de> {
     }
 
     fn deserialize_tuple<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<V::Value> {
-        visitor.visit_seq(Access { de: self, len })
+        self.nested(|de| visitor.visit_seq(Access { de, len }))
     }
 
     fn deserialize_tuple_struct<V: Visitor<'de>>(

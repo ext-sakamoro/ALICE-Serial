@@ -411,6 +411,14 @@ fn nest_bytes(levels: usize) -> Vec<u8> {
     b
 }
 
+/// A struct that holds itself: no finite value exists, but a decode must still stop.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct SelfHeld {
+    x: u8,
+    next: Box<SelfHeld>,
+}
+
 /// A type that recurses through `Option`.
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct OptChain(Option<Box<OptChain>>);
@@ -460,10 +468,56 @@ fn nesting_deeper_than_the_depth_limit_is_refused_without_exhausting_the_stack()
         from_slice::<Vec<Option<u8>>>(&bytes, BIG).unwrap(),
         side_by_side
     );
-    // fixed-shape nesting (tuples, structs, newtypes) cannot recurse and does not count
+    // tuples, structs and newtype structs count too, so a type that recurses through
+    // them (a hand-written Deserialize, or a struct that holds itself) is bounded as well
     assert_eq!(
-        from_slice_with_depth::<((((u8,),),),)>(&[7], BIG, 0).map(|v| v.0 .0 .0 .0),
+        from_slice_with_depth::<((((u8,),),),)>(&[7], BIG, 4).map(|v| v.0 .0 .0 .0),
         Ok(7)
+    );
+    assert_eq!(
+        from_slice_with_depth::<((((u8,),),),)>(&[7], BIG, 3),
+        Err(Bincode1Error::TooDeep { max_depth: 3 })
+    );
+    assert_eq!(
+        from_slice_with_depth::<Wrap>(&[1, 0, 0, 0], BIG, 0),
+        Err(Bincode1Error::TooDeep { max_depth: 0 })
+    );
+    // each route on its own is one level: refused at depth 0, read at depth 1
+    let mut m = BTreeMap::new();
+    m.insert(1u8, 2u8);
+    let map_bytes = to_vec(&m, BIG).unwrap();
+    let cases: [(&str, Vec<u8>); 7] = [
+        ("Some", vec![1, 7]),
+        ("seq", vec![1, 0, 0, 0, 0, 0, 0, 0, 7]),
+        ("map", map_bytes.clone()),
+        ("enum", vec![1, 0, 0, 0, 5]),
+        ("tuple", vec![1, 2]),
+        ("struct", vec![0xfe, 0xff, 7]),
+        ("newtype", vec![1, 0, 0, 0]),
+    ];
+    for (route, bytes) in &cases {
+        let at = |depth| -> Result<(), Bincode1Error> {
+            match *route {
+                "Some" => from_slice_with_depth::<Option<u8>>(bytes, BIG, depth).map(drop),
+                "seq" => from_slice_with_depth::<Vec<u8>>(bytes, BIG, depth).map(drop),
+                "map" => from_slice_with_depth::<BTreeMap<u8, u8>>(bytes, BIG, depth).map(drop),
+                "enum" => from_slice_with_depth::<Shape>(bytes, BIG, depth).map(drop),
+                "tuple" => from_slice_with_depth::<(u8, u8)>(bytes, BIG, depth).map(drop),
+                "struct" => from_slice_with_depth::<Point>(bytes, BIG, depth).map(drop),
+                _ => from_slice_with_depth::<Wrap>(bytes, BIG, depth).map(drop),
+            }
+        };
+        assert_eq!(at(1), Ok(()), "{route} at depth 1");
+        assert_eq!(
+            at(0),
+            Err(Bincode1Error::TooDeep { max_depth: 0 }),
+            "{route} at depth 0"
+        );
+    }
+    // a struct that holds itself has no finite value, but its decode still stops
+    assert_eq!(
+        from_slice_prefix::<SelfHeld>(&[7u8].repeat(1 << 16), BIG).map(|_| ()),
+        Err(Bincode1Error::TooDeep { max_depth: max })
     );
 }
 
