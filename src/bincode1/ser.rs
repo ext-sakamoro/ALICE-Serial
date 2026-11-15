@@ -4,9 +4,9 @@ use alloc::vec::Vec;
 
 use serde::ser::{self, Serialize};
 
-use super::Bincode1Error;
+use super::{Bincode1Error, BoxedError};
 
-type Result<T> = core::result::Result<T, Bincode1Error>;
+type Result<T> = core::result::Result<T, BoxedError>;
 
 /// Appends to `out`, never past `limit` bytes from where it started.
 pub(super) struct Serializer<'a> {
@@ -43,7 +43,7 @@ impl<'a> Serializer<'a> {
             return Ok(());
         };
         if self.out.len() - at < count {
-            return Err(Bincode1Error::ZeroSizeElements { count });
+            return Err(BoxedError::new(Bincode1Error::ZeroSizeElements { count }));
         }
         Ok(())
     }
@@ -55,7 +55,9 @@ impl<'a> Serializer<'a> {
                 self.out.extend_from_slice(bytes);
                 Ok(())
             }
-            _ => Err(Bincode1Error::LimitExceeded { limit: self.limit }),
+            _ => Err(BoxedError::new(Bincode1Error::LimitExceeded {
+                limit: self.limit,
+            })),
         }
     }
 
@@ -66,7 +68,7 @@ impl<'a> Serializer<'a> {
 
 impl ser::Serializer for &mut Serializer<'_> {
     type Ok = ();
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     type SerializeSeq = Self;
     type SerializeTuple = Self;
     type SerializeTupleStruct = Self;
@@ -210,7 +212,7 @@ impl ser::Serializer for &mut Serializer<'_> {
 
 impl ser::SerializeSeq for &mut Serializer<'_> {
     type Ok = ();
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     fn serialize_element<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<()> {
         value.serialize(&mut **self)
     }
@@ -221,7 +223,7 @@ impl ser::SerializeSeq for &mut Serializer<'_> {
 
 impl ser::SerializeTuple for &mut Serializer<'_> {
     type Ok = ();
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     fn serialize_element<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<()> {
         value.serialize(&mut **self)
     }
@@ -232,7 +234,7 @@ impl ser::SerializeTuple for &mut Serializer<'_> {
 
 impl ser::SerializeTupleStruct for &mut Serializer<'_> {
     type Ok = ();
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<()> {
         value.serialize(&mut **self)
     }
@@ -243,7 +245,7 @@ impl ser::SerializeTupleStruct for &mut Serializer<'_> {
 
 impl ser::SerializeTupleVariant for &mut Serializer<'_> {
     type Ok = ();
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<()> {
         value.serialize(&mut **self)
     }
@@ -254,7 +256,7 @@ impl ser::SerializeTupleVariant for &mut Serializer<'_> {
 
 impl ser::SerializeMap for &mut Serializer<'_> {
     type Ok = ();
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     fn serialize_key<T: Serialize + ?Sized>(&mut self, key: &T) -> Result<()> {
         key.serialize(&mut **self)
     }
@@ -268,7 +270,7 @@ impl ser::SerializeMap for &mut Serializer<'_> {
 
 impl ser::SerializeStruct for &mut Serializer<'_> {
     type Ok = ();
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     fn serialize_field<T: Serialize + ?Sized>(
         &mut self,
         _key: &'static str,
@@ -283,7 +285,7 @@ impl ser::SerializeStruct for &mut Serializer<'_> {
 
 impl ser::SerializeStructVariant for &mut Serializer<'_> {
     type Ok = ();
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     fn serialize_field<T: Serialize + ?Sized>(
         &mut self,
         _key: &'static str,

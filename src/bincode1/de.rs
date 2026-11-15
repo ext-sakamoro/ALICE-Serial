@@ -2,10 +2,10 @@
 
 use serde::de::{self, DeserializeSeed, IntoDeserializer, Visitor};
 
-use super::Bincode1Error;
+use super::{Bincode1Error, BoxedError};
 use crate::bounded::len_within;
 
-type Result<T> = core::result::Result<T, Bincode1Error>;
+type Result<T> = core::result::Result<T, BoxedError>;
 
 /// Reads from `input`, never past `limit` bytes nor deeper than `max_depth`.
 pub(super) struct Deserializer<'de> {
@@ -32,9 +32,9 @@ impl<'de> Deserializer<'de> {
     /// bounds the stack a decode can use, whether its `Deserialize` is derived or not.
     fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
         if self.depth >= self.max_depth {
-            return Err(Bincode1Error::TooDeep {
+            return Err(BoxedError::new(Bincode1Error::TooDeep {
                 max_depth: self.max_depth,
-            });
+            }));
         }
         self.depth += 1;
         let out = f(self);
@@ -54,7 +54,9 @@ impl<'de> Deserializer<'de> {
             .filter(|&e| e <= self.input.len())
             .ok_or(Bincode1Error::UnexpectedEnd)?;
         if end > self.limit {
-            return Err(Bincode1Error::LimitExceeded { limit: self.limit });
+            return Err(BoxedError::new(Bincode1Error::LimitExceeded {
+                limit: self.limit,
+            }));
         }
         let bytes = &self.input[self.pos..end];
         self.pos = end;
@@ -82,7 +84,9 @@ impl<'de> Deserializer<'de> {
         let len = u64::from_le_bytes(self.take_array()?);
         let n = len_within(len, 1, self.input.len() - self.pos)?;
         if n > self.limit.saturating_sub(self.pos) {
-            return Err(Bincode1Error::LimitExceeded { limit: self.limit });
+            return Err(BoxedError::new(Bincode1Error::LimitExceeded {
+                limit: self.limit,
+            }));
         }
         Ok(n)
     }
@@ -108,17 +112,17 @@ macro_rules! fixed_int {
 }
 
 impl<'de> de::Deserializer<'de> for &mut Deserializer<'de> {
-    type Error = Bincode1Error;
+    type Error = BoxedError;
 
     fn deserialize_any<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
-        Err(Bincode1Error::DeserializeAnyNotSupported)
+        Err(BoxedError::new(Bincode1Error::DeserializeAnyNotSupported))
     }
 
     fn deserialize_bool<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         match self.read_u8()? {
             0 => visitor.visit_bool(false),
             1 => visitor.visit_bool(true),
-            b => Err(Bincode1Error::InvalidBool(b)),
+            b => Err(BoxedError::new(Bincode1Error::InvalidBool(b))),
         }
     }
 
@@ -145,7 +149,7 @@ impl<'de> de::Deserializer<'de> for &mut Deserializer<'de> {
         let first = self.read_u8()?;
         let width = utf8_width(first);
         if width == 0 {
-            return Err(Bincode1Error::InvalidChar);
+            return Err(BoxedError::new(Bincode1Error::InvalidChar));
         }
         let mut buf = [first, 0, 0, 0];
         if width > 1 {
@@ -183,7 +187,7 @@ impl<'de> de::Deserializer<'de> for &mut Deserializer<'de> {
         match self.read_u8()? {
             0 => visitor.visit_none(),
             1 => self.nested(|de| visitor.visit_some(de)),
-            t => Err(Bincode1Error::InvalidOptionTag(t)),
+            t => Err(BoxedError::new(Bincode1Error::InvalidOptionTag(t))),
         }
     }
 
@@ -249,11 +253,11 @@ impl<'de> de::Deserializer<'de> for &mut Deserializer<'de> {
     }
 
     fn deserialize_identifier<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
-        Err(Bincode1Error::DeserializeAnyNotSupported)
+        Err(BoxedError::new(Bincode1Error::DeserializeAnyNotSupported))
     }
 
     fn deserialize_ignored_any<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value> {
-        Err(Bincode1Error::DeserializeAnyNotSupported)
+        Err(BoxedError::new(Bincode1Error::DeserializeAnyNotSupported))
     }
 
     fn is_human_readable(&self) -> bool {
@@ -268,7 +272,7 @@ struct Access<'a, 'de> {
 }
 
 impl<'de> de::SeqAccess<'de> for Access<'_, 'de> {
-    type Error = Bincode1Error;
+    type Error = BoxedError;
 
     fn next_element_seed<T: DeserializeSeed<'de>>(&mut self, seed: T) -> Result<Option<T::Value>> {
         if self.len == 0 {
@@ -284,7 +288,7 @@ impl<'de> de::SeqAccess<'de> for Access<'_, 'de> {
 }
 
 impl<'de> de::MapAccess<'de> for Access<'_, 'de> {
-    type Error = Bincode1Error;
+    type Error = BoxedError;
 
     fn next_key_seed<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>> {
         if self.len == 0 {
@@ -304,19 +308,18 @@ impl<'de> de::MapAccess<'de> for Access<'_, 'de> {
 }
 
 impl<'de> de::EnumAccess<'de> for &mut Deserializer<'de> {
-    type Error = Bincode1Error;
+    type Error = BoxedError;
     type Variant = Self;
 
     fn variant_seed<V: DeserializeSeed<'de>>(self, seed: V) -> Result<(V::Value, Self)> {
         let index = self.read_u32()?;
-        let value =
-            seed.deserialize(IntoDeserializer::<Bincode1Error>::into_deserializer(index))?;
+        let value = seed.deserialize(IntoDeserializer::<BoxedError>::into_deserializer(index))?;
         Ok((value, self))
     }
 }
 
 impl<'de> de::VariantAccess<'de> for &mut Deserializer<'de> {
-    type Error = Bincode1Error;
+    type Error = BoxedError;
 
     fn unit_variant(self) -> Result<()> {
         Ok(())

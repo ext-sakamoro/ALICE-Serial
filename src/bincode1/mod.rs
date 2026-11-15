@@ -26,6 +26,7 @@
 mod de;
 mod ser;
 
+use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
@@ -152,6 +153,71 @@ impl serde::de::Error for Bincode1Error {
     }
 }
 
+/// The error the private serializer and deserializer carry: one pointer wide
+///
+/// serde's derived `Serialize` / `Deserialize` of an enum keep one `Result<(), Error>` slot per
+/// variant arm in a debug build, so the frame of one nesting level grows with the size of the
+/// error. [`Bincode1Error`] is 32 bytes; boxing it here makes each slot 8 bytes (as bincode 1's
+/// `Box<ErrorKind>`), and the public functions unbox it once. Measured on a left-deep chain of
+/// an enum with about 140 variants (aarch64, debug): one level of the derived `serialize` took
+/// 75,104 bytes of stack with the 32-byte error, against bincode 1.3.3's 30,032.
+pub(super) struct BoxedError(Box<Bincode1Error>);
+
+impl BoxedError {
+    pub(super) fn new(e: Bincode1Error) -> Self {
+        Self(Box::new(e))
+    }
+
+    fn into_inner(self) -> Bincode1Error {
+        *self.0
+    }
+}
+
+impl fmt::Debug for BoxedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&*self.0, f)
+    }
+}
+
+impl fmt::Display for BoxedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&*self.0, f)
+    }
+}
+
+impl core::error::Error for BoxedError {}
+
+impl serde::ser::Error for BoxedError {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::new(Bincode1Error::Custom(msg.to_string()))
+    }
+}
+
+impl serde::de::Error for BoxedError {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::new(Bincode1Error::Custom(msg.to_string()))
+    }
+}
+
+// every derived arm holds a `Result<(), BoxedError>`: keep it one pointer wide (a wider error
+// multiplied the stack of one nesting level by 2.5, see `BoxedError`)
+const _: () = assert!(
+    core::mem::size_of::<Result<(), BoxedError>>() == core::mem::size_of::<usize>(),
+    "the encoder / decoder error must stay one pointer wide"
+);
+
+impl From<Bincode1Error> for BoxedError {
+    fn from(e: Bincode1Error) -> Self {
+        Self::new(e)
+    }
+}
+
+impl From<LenError> for BoxedError {
+    fn from(e: LenError) -> Self {
+        Self::new(e.into())
+    }
+}
+
 impl From<LenError> for Bincode1Error {
     fn from(e: LenError) -> Self {
         Self::Length(e)
@@ -188,7 +254,7 @@ pub fn encode_into<T: Serialize + ?Sized>(
         Ok(()) => Ok(out.len() - start),
         Err(e) => {
             out.truncate(start);
-            Err(e)
+            Err(e.into_inner())
         }
     }
 }
@@ -256,6 +322,6 @@ pub fn from_slice_prefix_with_depth<'de, T: Deserialize<'de>>(
     max_depth: usize,
 ) -> Result<(T, usize), Bincode1Error> {
     let mut de = de::Deserializer::new(bytes, limit, max_depth);
-    let value = T::deserialize(&mut de)?;
+    let value = T::deserialize(&mut de).map_err(BoxedError::into_inner)?;
     Ok((value, de.position()))
 }

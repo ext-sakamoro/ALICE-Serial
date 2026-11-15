@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fuzz/`: a differential check against bincode 1.3.3 and bincode 2.0.1 (`config::legacy()`) — fuzz target `fuzz_bincode1_diff` and a stable test over a fixed corpus (CI job `bincode1`); bincode is a dependency of `fuzz/` only, which has its own lockfile, and `scripts/no_bincode_in_graph.sh` fails CI when bincode enters alice-serial's own graph
 
 ### Fixed
+- `bincode1`: the error the private encoder and decoder carry is one pointer wide (`Bincode1Error` boxed inside, unboxed once by the public functions; the public type, its variants and its text are unchanged) serde's derived `Serialize` / `Deserialize` of an enum keep one `Result<(), Error>` per variant arm in a debug build, so the 32-byte error made one nesting level of ALICE-SDF's `SdfNode` (about 140 variants) take 75,104 bytes of stack against bincode 1.3.3's 30,032 (aarch64): a left-deep chain bincode 1 encoded on a 2 MiB thread (68 levels) overflowed at 26 Now 67 levels on 2 MiB and 273 on 8 MiB (bincode 1.3.3: 68 / 277) A compile-time assertion keeps `Result<(), _>` one pointer wide; `tests/bincode1_stack.rs` round-trips a 40-level chain of a 130-variant enum on a 2 MiB thread in a child process (27 levels fit before, 54 now) Bytes unchanged (fixtures and the bincode differential test); release encode + decode of a 300-level SdfTree chain: 129 µs before, 101-104 µs after
 
 - A string, byte string, array or map longer than `u32::MAX` was written with a truncated length; it is now refused with `TooLong`
 
