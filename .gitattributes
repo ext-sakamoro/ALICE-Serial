@@ -1,2 +1,4 @@
 # SERIAL_SEMANTICS_ID is the SHA-256 of these bytes; no line-ending conversion
 src/format-1.txt -text
+# BINCODE1_LAYOUT_ID is the SHA-256 of these bytes; no line-ending conversion
+src/bincode1-layout.txt -text

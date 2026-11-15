@@ -48,6 +48,12 @@ relint
 rustup target list --installed | grep -q '^thumbv7em-none-eabihf$' || rustup target add thumbv7em-none-eabihf
 ( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo clippy --locked --lib --no-default-features --target thumbv7em-none-eabihf -- -W clippy::pedantic -D warnings )
 
+step "ci.yml / no_std: Check (no_std + serde、bare-metal)"
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo check --locked --lib --features serde --target thumbv7em-none-eabihf )
+
+step "ci.yml / bincode1: bincode absent from the dependency graph"
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; bash scripts/no_bincode_in_graph.sh )
+
 step "ci.yml / actionlint: actionlint"
 actionlint .github/workflows/*.yml
 
@@ -96,6 +102,9 @@ fi
 
 step "ci.yml / test: Test"
 ( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo test --locked --all-features )
+
+step "ci.yml / bincode1: Differential test against bincode 1.3.3 and 2.0.1"
+( export CARGO_TERM_COLOR="always" RUSTDOCFLAGS="-D warnings"; cargo test --locked --release --manifest-path fuzz/Cargo.toml --test bincode1_diff -- --nocapture )
 
 step "security-audit.yml / audit: Run cargo audit"
 ( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --deny yanked )

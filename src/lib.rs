@@ -37,6 +37,8 @@
 
 extern crate alloc;
 
+#[cfg(feature = "serde")]
+pub mod bincode1;
 pub mod bounded;
 pub mod encoder;
 pub mod errors;

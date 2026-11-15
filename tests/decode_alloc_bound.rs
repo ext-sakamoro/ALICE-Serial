@@ -135,3 +135,26 @@ fn nested_counts_cannot_multiply_memory() {
         );
     }
 }
+
+/// bincode1: a count that fits the input but runs past the caller's limit is
+/// refused before it sizes anything, so the limit bounds memory as well as reads
+/// (a sequence's capacity would otherwise follow the count up to serde's cap)
+#[cfg(feature = "serde")]
+#[test]
+fn bincode1_a_count_past_the_limit_allocates_nothing_for_it() {
+    use alice_serial::bincode1::{from_slice_prefix, Bincode1Error};
+    const COUNT: u64 = 1 << 16;
+    const LIMIT: usize = 64;
+    let _one = SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // a u64 count, then that many 8-byte elements: the whole input holds them
+    let mut input = COUNT.to_le_bytes().to_vec();
+    input.resize(8 + 8 * usize::try_from(COUNT).unwrap(), 0x11);
+    let (got, largest, _) = measure(|| from_slice_prefix::<Vec<u64>>(&input, LIMIT));
+    assert_eq!(got, Err(Bincode1Error::LimitExceeded { limit: LIMIT }));
+    assert!(
+        largest <= LIMIT,
+        "largest allocation {largest} bytes for a decode limited to {LIMIT}"
+    );
+}
