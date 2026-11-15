@@ -31,6 +31,28 @@ assert_eq!(encode(&back)?, bytes);
 # Ok::<(), alice_serial::SerialError>(())
 ```
 
+## bincode 1 layout (feature `serde`)
+
+`bincode1` reads and writes the bytes bincode 1.x writes by default (and bincode 2.x with
+`config::legacy()`), for any serde type, so stores that already hold such bytes keep them
+unchanged without depending on bincode:
+
+- fixed-width little-endian integers, `u64` lengths, a `u32` variant index, a `u8` tag for `Option`
+- every call takes a limit; a decode checks each length against the bytes that remain before it sizes anything
+- `from_slice` refuses trailing bytes; `from_slice_prefix` returns the value and the bytes it used
+- builds without `std` (`alloc` only)
+
+`BINCODE1_LAYOUT` states the rules and `BINCODE1_LAYOUT_ID` is its SHA-256.
+
+```rust
+use alice_serial::bincode1::{from_slice, to_vec};
+
+let bytes = to_vec(&(7u16, "ab"), 1 << 20)?;
+assert_eq!(bytes, [7, 0, 2, 0, 0, 0, 0, 0, 0, 0, b'a', b'b']);
+let back: (u16, String) = from_slice(&bytes, 1 << 20)?;
+# Ok::<(), alice_serial::bincode1::Bincode1Error>(())
+```
+
 ## License
 
 `LicenseRef-Proprietary` from this version: the source is published for reading only, and

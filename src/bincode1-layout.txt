@@ -1,0 +1,37 @@
+alice-serial bincode1 layout 1
+
+The bytes bincode 1.x writes with its default options (bincode::serialize,
+bincode::deserialize), which bincode 2.x writes with config::legacy(). This
+module reads and writes that layout only, through serde.
+
+Every integer is fixed width, little endian.
+  bool          1 byte: 0 false, 1 true; any other byte is refused
+  u8 i8         1 byte
+  u16 i16       2 bytes
+  u32 i32       4 bytes
+  u64 i64       8 bytes
+  u128 i128     16 bytes
+  f32 f64       4 / 8 bytes, the IEEE 754 bits as given (NaN payloads kept)
+  char          its UTF-8 bytes, 1 to 4, no length; the first byte gives the
+                width, and bytes that are not one valid UTF-8 scalar are refused
+  str String    u64 byte length, then UTF-8 bytes; invalid UTF-8 is refused
+  bytes         u64 length, then the bytes
+  Option        u8 tag: 0 None, 1 Some then the value; any other tag is refused
+  unit          nothing
+  unit struct   nothing
+  newtype struct    the inner value
+  tuple, tuple struct, struct, array    the fields in order, no length
+  seq           u64 count, then the elements; a seq of unknown length is refused
+  map           u64 count, then key and value pairs in the order given
+  enum          u32 variant index, then the variant's fields as above
+
+A decode reads only from the bytes it was given:
+  - every length and count is checked against the bytes that remain before it
+    sizes anything (a count of n elements needs at least n bytes left, so a
+    seq of zero-size elements longer than the remaining input is refused)
+  - nothing past the caller's limit is read, and an encode writes nothing past
+    the caller's limit
+  - from_slice refuses bytes left after the value; from_slice_prefix returns
+    the value and how many bytes it used
+  - deserialize_any, deserialize_identifier and deserialize_ignored_any are
+    refused: the layout does not describe itself
